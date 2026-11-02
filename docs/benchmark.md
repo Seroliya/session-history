@@ -1,88 +1,90 @@
-# 实测：有 / 无 session-history 时，agent 找历史会话的表现
+# Benchmark: finding past sessions with and without session-history
 
-测试日期：2026-11-02。测试机上共有约 560 个历史会话：DSH 约 230 个，Codex 约 330 个，压缩后共约 660 MB。
+**English** | [简体中文](benchmark.zh-CN.md)
 
-## 测试方法
+Run on 2026-11-02, on a machine with about 560 past sessions (about 230 DSH and 330 Codex, about 660 MB compressed).
 
-- **任务**：用用户的原话描述一个以前做过的项目，要求 agent 找到相关会话，并说明项目进行到哪一步。描述里**不提示**会话在哪个工具里，也**不提供**真实标题。
-- **对照组**：
-  - 用 skill：调用 `sessions.mjs`。
-  - 不用 skill：禁止读取或运行本 skill，只能用 shell、grep、read 直接读原始文件。机器上有 zstd 命令行和 Node 可用。
-- **隔离**：禁止读取测试当天更新的会话，因为测试过程本身产生的会话里已经包含答案。所有子代理都只读，不修改任何文件。
-- **度量**：每个子代理结束后，用本 skill 读取它自己的会话记录，统计以下指标：
-  - 首末记录之间的耗时
-  - 工具调用次数
-  - 工具结果的总字数，即读进上下文的内容量
-  - 累计 token：每一步请求的输入加输出求和，大部分命中缓存
-- **评分**：会前先读原始记录定好标准答案，再逐项对照打分。
+## Method
 
-## 测试一：找“准备给小米手机 root”的 Codex 会话（DeepSeek-V4.1-Flash）
+- **Task.** Describe a past project in the user's own words, and ask the agent to find the related sessions and report how far the project got. The task never says which tool the session lives in and never gives the real title.
+- **Groups.**
+  - With skill: the agent runs `sessions.mjs`.
+  - Without: the agent may not read or run this skill. It can only read raw files with shell, grep and read; the zstd CLI and Node are available.
+- **Isolation.** Sessions updated on the test day were off limits, because the test's own sessions contain the answers. All agents were read-only.
+- **Metrics.** Each subagent's own session was read back with this skill, which gives:
+  - time between its first and last record
+  - number of tool calls
+  - total characters of tool results, i.e. text read into context
+  - cumulative tokens: input plus output summed over every step, mostly cache hits
+- **Scoring.** Ground truth was established from the raw transcripts beforehand, and each answer was scored against it.
 
-| | 用 skill | 不用 skill |
+## Test 1: find the "root my Xiaomi phone" Codex session (DeepSeek-V4.1-Flash)
+
+| | With skill | Without |
 |---|---|---|
-| 耗时 | 22.9 秒 | 91.0 秒 |
-| 工具调用 | 6 次 | 20 次 |
-| 读进上下文的工具结果 | 1.5 万字 | 12.2 万字 |
-| 累计 token | 28.5 万 | 147 万 |
-| 结论 | 正确 | 正确 |
+| Time | 22.9 s | 91.0 s |
+| Tool calls | 6 | 20 |
+| Tool-result text read | 15 k chars | 122 k chars |
+| Cumulative tokens | 0.29 M | 1.47 M |
+| Result | correct | correct |
 
-## 测试二：3 个会话 × 2 个模型 × 有无 skill，共 12 次
+## Test 2: 3 projects × 2 models × with/without, 12 runs
 
-三个任务的用户原话及其对应的真实会话：
+Each project as the user put it, and where it actually was:
 
-| 用户原话 | 实际位置与标题 | 难点 |
+| User's words | Where it really is | What makes it hard |
 |---|---|---|
-| “开发 screenlens-mcp” | DSH，横跨 5 个会话和 2 个目录，其中 2 次是 fork | 后一个会话推翻了前一个的方案 |
-| “VRChat 建模水族馆” | Codex，标题是“创建 VRC 海洋馆地图” | 用户的叫法和标题对不上，搜“水族馆”命中为 0 |
-| “搜集 2026 年 10 月具身智能新闻” | DSH，标题是“具身机器人十月进展时间轴视频” | 之后在同一目录下还有 4 个后续会话 |
+| "developing screenlens-mcp" | DSH, spread over 5 sessions and 2 directories, 2 of them forks | a later session reversed an earlier plan |
+| "the VRChat aquarium modelling project" | Codex, titled "Create a VRC ocean-hall map" (in Chinese) | the user's words don't match the title; searching "aquarium" finds nothing |
+| "collecting October 2026 embodied-AI news" | DSH, titled "Embodied robots October timeline video" (in Chinese) | 4 follow-up sessions in the same directory afterwards |
 
-### 汇总（各 6 次平均）
+### Summary (average of 6 runs each)
 
-| 指标 | 用 skill | 不用 skill | 差距 |
+| Metric | With skill | Without | Difference |
 |---|---|---|---|
-| 耗时 | 53 秒 | 120 秒 | 快 2.2 倍 |
-| 工具调用 | 6.5 次 | 12.7 次 | 少一半 |
-| 读进上下文的工具结果 | 2.9 万字 | 12.5 万字 | 少 76% |
-| 累计 token | 36 万 | 103 万 | 约为 1/3 |
-| 找对会话、说对最终状态 | 6/6 | 6/6 | 持平 |
+| Time | 53 s | 120 s | 2.2× faster |
+| Tool calls | 6.5 | 12.7 | half as many |
+| Tool-result text read | 29 k chars | 125 k chars | 76% less |
+| Cumulative tokens | 0.36 M | 1.03 M | about 1/3 |
+| Right session and right final state | 6/6 | 6/6 | same |
 
-### 按模型
+### By model
 
-| 模型 | 条件 | 耗时 | 工具调用 | token |
+| Model | Group | Time | Tool calls | Tokens |
 |---|---|---|---|---|
-| DeepSeek-V4.1-Flash | 用 skill | 31 秒 | 8.3 次 | 42 万 |
-| DeepSeek-V4.1-Flash | 不用 skill | 87 秒 | 14.7 次 | 128 万 |
-| GPT-6.1 Sol | 用 skill | 76 秒 | 4.7 次 | 29 万 |
-| GPT-6.1 Sol | 不用 skill | 152 秒 | 10.7 次 | 78 万 |
+| DeepSeek-V4.1-Flash | with skill | 31 s | 8.3 | 0.42 M |
+| DeepSeek-V4.1-Flash | without | 87 s | 14.7 | 1.28 M |
+| GPT-6.1 Sol | with skill | 76 s | 4.7 | 0.29 M |
+| GPT-6.1 Sol | without | 152 s | 10.7 | 0.78 M |
 
-### 逐次明细
+### Every run
 
-| 任务 | 模型 | 条件 | 耗时 | 工具调用 | 工具结果字数 | token | 评分 |
+| Project | Model | Group | Time | Tool calls | Text read | Tokens | Score |
 |---|---|---|---|---|---|---|---|
-| screenlens | DeepSeek | 用 skill | 31.4 秒 | 8 | 4.3 万 | 44 万 | ⚠ 把已撤回的方案说成已完成 |
-| screenlens | DeepSeek | 不用 | 68.6 秒 | 16 | 13.4 万 | 140 万 | ✓（把 fork 误认为项目起点） |
-| screenlens | Sol | 用 skill | 115.8 秒 | 5 | 3.4 万 | 31 万 | ✓ 最准确 |
-| screenlens | Sol | 不用 | 145.5 秒 | 11 | 12.5 万 | 83 万 | ✓（把 fork 误认为项目起点） |
-| VRChat | DeepSeek | 用 skill | 28.5 秒 | 7 | 1.8 万 | 40 万 | ✓ |
-| VRChat | DeepSeek | 不用 | 124.8 秒 | 16 | 3.7 万 | 109 万 | ✓（没拿到会话标题） |
-| VRChat | Sol | 用 skill | 59.2 秒 | 5 | 2.3 万 | 29 万 | ✓ |
-| VRChat | Sol | 不用 | 158.5 秒 | 8 | 9.9 万 | 56 万 | ✓ |
-| 具身新闻 | DeepSeek | 用 skill | 33.4 秒 | 10 | 2.9 万 | 43 万 | ✓（漏了后续会话） |
-| 具身新闻 | DeepSeek | 不用 | 66.7 秒 | 12 | 16.6 万 | 134 万 | ✓ 含后续会话 |
-| 具身新闻 | Sol | 用 skill | 51.9 秒 | 4 | 2.9 万 | 26 万 | ✓ 含后续会话 |
-| 具身新闻 | Sol | 不用 | 153.3 秒 | 13 | 18.7 万 | 94 万 | ✓ 含后续会话 |
+| screenlens | DeepSeek | with skill | 31.4 s | 8 | 43 k | 0.44 M | ⚠ reported a reverted plan as done |
+| screenlens | DeepSeek | without | 68.6 s | 16 | 134 k | 1.40 M | ✓ (took a fork for the project's origin) |
+| screenlens | Sol | with skill | 115.8 s | 5 | 34 k | 0.31 M | ✓ most precise |
+| screenlens | Sol | without | 145.5 s | 11 | 125 k | 0.83 M | ✓ (took a fork for the project's origin) |
+| VRChat | DeepSeek | with skill | 28.5 s | 7 | 18 k | 0.40 M | ✓ |
+| VRChat | DeepSeek | without | 124.8 s | 16 | 37 k | 1.09 M | ✓ (did not find the title) |
+| VRChat | Sol | with skill | 59.2 s | 5 | 23 k | 0.29 M | ✓ |
+| VRChat | Sol | without | 158.5 s | 8 | 99 k | 0.56 M | ✓ |
+| embodied news | DeepSeek | with skill | 33.4 s | 10 | 29 k | 0.43 M | ✓ (missed the follow-up sessions) |
+| embodied news | DeepSeek | without | 66.7 s | 12 | 166 k | 1.34 M | ✓ incl. follow-ups |
+| embodied news | Sol | with skill | 51.9 s | 4 | 29 k | 0.26 M | ✓ incl. follow-ups |
+| embodied news | Sol | without | 153.3 s | 13 | 187 k | 0.94 M | ✓ incl. follow-ups |
 
-## 观察
+## Observations
 
-- **不用 skill 的组为什么慢、为什么贵**：
-  - 6 组里有 4 组在开头递归列了 `.codex` 或 `.dsh` 目录，单次输出就达到 5 万字的上限。
-  - 读原始 JSONL 时，大量 token 花在了加密的 reasoning、工具定义这类无用内容上。
-  - 有一组用 `zstdDecompressSync` 解压 DSH 文件，只解开了第一帧。这次目标恰好在 Codex，所以没出事；如果目标在 DSH，大概率会漏读。
-- **准确性没有拉开差距**：12 组里只有一处实质错误，出在 DeepSeek 用 skill 的那组。它读了被后续会话推翻的旧会话，把已撤回的方案当成了已完成。v1.1 针对这个问题新增了“会话链”和“同目录之后的会话”两项提示（见 README），但**还没有重新跑测试验证**。
+- **Why the runs without the skill were slower and more expensive.**
+  - 4 of the 6 began by recursively listing `.codex` or `.dsh`. A single listing hit the 50 k-character output cap.
+  - Reading raw JSONL spends most of the tokens on encrypted reasoning, tool definitions and other noise.
+  - One run decoded DSH files with `zstdDecompressSync`, which only decodes the first zstd frame. It worked this time only because the target was in Codex; had it been in DSH, most of the transcript would have been missed.
+- **Accuracy did not separate the groups.** There was one real mistake in 12 runs, by DeepSeek with the skill: it read an older session whose plan a later session had reversed, and reported the reverted plan as done. Version 1.1 added lineage warnings and "later sessions in the same directory" hints for exactly this case (see the README). **These have not been re-benchmarked yet.**
 
-## 局限
+## Caveats
 
-- **样本少**：每个组合只跑了 1 次，单次波动可能很大，比如 Sol 用 skill 跑 screenlens 用了 116 秒。
-- **两批的机器负载不同**：最多只能同时运行 8 个子代理，第三个任务是后来补跑的。只有同一批内的耗时可以直接比较。
-- **索引是预热好的**：skill 的索引在测试前已经建好。新机器第一次运行要先建索引，约 40 秒，之后每次查询 0.1–0.3 秒。
-- **累计 token 是每一步请求求和**：包含缓存命中的部分，所以看相对比例比看绝对数更有意义。
+- **Small sample.** One run per combination, so single runs can vary a lot. For example, Sol with the skill took 116 s on screenlens.
+- **Two batches under different load.** At most 8 subagents could run at once, so the third project ran in a later batch. Compare times only within a batch.
+- **Warm index.** The skill's index had already been built. On a new machine the first call spends about 40 s indexing; after that, each query takes 0.1–0.3 s.
+- **Cumulative tokens are summed over steps,** including cache hits. Compare the ratios rather than the absolute numbers.
