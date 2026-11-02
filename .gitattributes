@@ -1,0 +1,2 @@
+# LF everywhere: the bin script's shebang breaks with CRLF on macOS/Linux.
+* text=auto eol=lf

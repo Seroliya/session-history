@@ -1,0 +1,21 @@
+{
+  "name": "session-history-skill",
+  "version": "1.1.0",
+  "description": "Let AI coding agents read past sessions across DeepSeek Harness, OpenAI Codex and Claude Code — find, search and read transcripts at a controlled depth.",
+  "type": "module",
+  "bin": {
+    "session-history": "scripts/cli.mjs"
+  },
+  "scripts": {
+    "test": "node tests/run.mjs && node tests/install-test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["agent-skill", "claude-code", "codex", "deepseek", "session", "transcript", "history", "mcp"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Seroliya/session-history.git"
+  },
+  "license": "MIT"
+}
